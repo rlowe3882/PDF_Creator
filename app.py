@@ -133,7 +133,11 @@ if uploaded_pdf and st.button("🔁 Process Document"):
         st.success("✅ Document processed successfully!")
         st.download_button("📥 Download Modified PDF", data=final_data, file_name="modified_output.pdf")
 
-        base64_pdf = base64.b64encode(final_data).decode("utf-8")
-        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" type="application/pdf"></iframe>'
-        st.markdown("#### 📄 Preview:")
-        st.components.v1.html(pdf_display, height=600)
+                # Save final PDF for direct access
+        output_path = "/mnt/data/modified_output.pdf"
+        with open(output_path, "wb") as f:
+            f.write(final_data)
+
+        st.markdown("#### 📄 PDF Preview Link:")
+        st.markdown(f"[🔎 Click to view PDF preview](sandbox:{output_path})", unsafe_allow_html=True)
+
