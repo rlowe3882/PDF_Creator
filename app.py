@@ -1,17 +1,32 @@
+
 import streamlit as st
 import tempfile
 import fitz  # PyMuPDF
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-import base64
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 # --- Load environment ---
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# --- Register Unicode-Compatible Fonts ---
+pdfmetrics.registerFont(TTFont("NotoSans", "fonts/NotoSans-Regular.ttf"))
+pdfmetrics.registerFont(TTFont("NotoSansJP", "fonts/NotoSansJP-Regular.ttf"))
+pdfmetrics.registerFont(TTFont("NotoSansSC", "fonts/NotoSansSC-Regular.ttf"))
+pdfmetrics.registerFont(TTFont("NotoSansArabic", "fonts/NotoSansArabic-Regular.ttf"))
+
+# --- Language to Font mapping ---
+LANG_FONT_MAP = {
+    "Japanese": "NotoSansJP",
+    "Chinese": "NotoSansSC",
+    "Arabic": "NotoSansArabic"
+}
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="AI PDF Rewriter, Translator & Summarizer", layout="centered")
@@ -28,13 +43,11 @@ summarize = st.checkbox("🔍 Summarize this document instead")
 
 if mode.startswith("Rewrite"):
     tone = st.selectbox("Select desired tone:", ["Professional", "Friendly", "Conversational", "Legalese"])
+    target_lang = None
 else:
-    target_lang = st.text_input("Translate to language (e.g., Spanish, French, Hindi):")
+    target_lang = st.selectbox("Translate to language:", ["Spanish", "French", "Japanese", "Hindi", "German", "Chinese", "Arabic", "Italian"])
 
 primary_color = st.color_picker("Highlight color", "#003366")
-font_choice = st.selectbox("Choose font", ["Helvetica", "Times-Roman", "Courier"])
-font_size = st.selectbox("Font size", ["Small", "Medium", "Large"])
-font_map = {"Small": 8, "Medium": 10, "Large": 12}
 
 if not OPENAI_API_KEY:
     st.error("❗ OpenAI API key missing. Please set it in your .env file.")
@@ -63,7 +76,7 @@ def wrap_text(text, canvas_obj, max_width, font, font_size):
         lines.append(current_line)
     return lines
 
-def create_pdf_from_text(text, output_path, color_hex, font="Helvetica", font_size=10):
+def create_pdf_from_text(text, output_path, color_hex, font="NotoSans", font_size=10):
     from reportlab.lib.units import inch
 
     c = canvas.Canvas(output_path, pagesize=LETTER)
@@ -100,6 +113,9 @@ if uploaded_pdf and st.button("🔁 Process Document"):
 
     with st.spinner("📖 Extracting text..."):
         extracted_text = extract_text_from_pdf(input_path)
+    if not extracted_text.strip():
+        st.error("❗ No text found in the PDF. Please upload a valid PDF with text content.")
+        st.stop()
 
     with st.spinner("🤖 Processing with OpenAI..."):
         if summarize:
@@ -119,13 +135,15 @@ if uploaded_pdf and st.button("🔁 Process Document"):
         )
         processed_text = response.choices[0].message.content.strip()
 
+    selected_font = LANG_FONT_MAP.get(target_lang, "NotoSans")
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as out_pdf:
         create_pdf_from_text(
             processed_text,
             out_pdf.name,
-            primary_color,
-            font=font_choice,
-            font_size=font_map[font_size]
+            color_hex=primary_color,
+            font=selected_font,
+            font_size=10
         )
         with open(out_pdf.name, "rb") as f:
             final_data = f.read()
@@ -133,11 +151,4 @@ if uploaded_pdf and st.button("🔁 Process Document"):
         st.success("✅ Document processed successfully!")
         st.download_button("📥 Download Modified PDF", data=final_data, file_name="modified_output.pdf")
 
-                # Save final PDF for direct access
-        output_path = "/mnt/data/modified_output.pdf"
-        with open(output_path, "wb") as f:
-            f.write(final_data)
-
-        st.markdown("#### 📄 PDF Preview Link:")
-        st.markdown(f"[🔎 Click to view PDF preview](sandbox:{output_path})", unsafe_allow_html=True)
-
+        
